@@ -1,0 +1,60 @@
+#!/bin/bash
+# Author: rbost@redhat.com (2020)
+
+VERSION="0.0.1"
+MAX_DEPTH=${MAX_DEPTH:-5}
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+usage() { 
+    echo -e "Login to OpenShift 4 cluster using installation assets directory.\n"
+    echo -e "Usage: oc flogin PATH"
+    echo -e "Example:\n  $ oc flogin ~/installations/test-cluster"
+    echo -e "  $ oc flogin ~/installations/test-cluster/auth"
+    echo -e "  $ oc flogin version"
+    echo -e "  $ oc flogin help"
+    exit 0
+}
+
+if [ $# -eq 0 ];
+then
+    echo -e "\n${RED}Error: Missing path.${NC}\n"
+    usage
+fi
+
+# optional argument handling
+if [[ "$1" == "version" ]]
+then
+    echo $VERSION
+    exit 0
+fi
+
+if [[ "$1" == "help" ]]
+then
+    usage
+fi
+
+kubeconfigC=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeconfig 2> /dev/null | wc -l)
+kubeadminpasswordC=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeadmin-password 2> /dev/null | wc -l)
+
+if [ $kubeconfigC -eq 0 ] || [ $kubeadminpasswordC -eq 0 ];
+then
+    echo -e "${RED}No kubeconfig or kubeadmin-password file found in given path: $1${NC}"
+    exit 1
+fi
+if [ $kubeconfigC -gt 1 ] || [ $kubeadminpasswordC -gt 1 ];
+then
+    echo -e "${RED}Too many kubeconfig or kubeadmin-password files found in given path.\nPlease provide a more specific path: $1${NC}"
+    exit 1
+fi
+
+kubeconfig=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeconfig 2> /dev/null)
+kubeadminpassword=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeadmin-password 2> /dev/null)
+
+echo -e "${GREEN}Using $kubeconfig${NC}"
+server=$(grep -m1 'server: ' $kubeconfig | awk '{print $2}')
+kpass=$(cat $kubeadminpassword)
+
+oc login -u kubeadmin -p $kpass $server
