@@ -2,6 +2,15 @@
 
 OpenShift client plugin that finds and uses `kubeconfig` and `kubeadmin-password` file to login to a OpenShift 4 cluster.
 
+# Install
+
+Install somewhere on your `$PATH`:
+
+```
+# wget -P /usr/local/bin https://raw.githubusercontent.com/bostrt/oc-flogin/master/oc-flogin
+```
+
+
 # Usage
 
 ```
