@@ -7,7 +7,8 @@ OpenShift client plugin that finds and uses `kubeconfig` and `kubeadmin-password
 Install somewhere on your `$PATH`:
 
 ```
-# wget -P /usr/local/bin https://raw.githubusercontent.com/bostrt/oc-flogin/master/oc-flogin
+# sudo wget -P /usr/local/bin https://raw.githubusercontent.com/bostrt/oc-flogin/master/oc-flogin
+# sudo chmod +x /usr/local/bin/oc-flogin
 ```
 
 
