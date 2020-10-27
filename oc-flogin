@@ -16,15 +16,16 @@ fi
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
+KUBE_PATH=''
+INITIAL_OPTIONS="$@"
 
 usage() { 
     echo -e "Login to OpenShift 4 cluster using installation assets directory.\n"
-    echo -e "Usage: oc flogin -p PATH [-h|-v|-D <depth>]"
-    echo -e "  -p: Set the search PATH"
+    echo -e "Usage: oc flogin <INSTALL_PATH> [-h|-v|-D <depth>]"
     echo -e "  -v: Display the version"
     echo -e "  -h: Display this help"
     echo -e "  -D: Set the MAX_DEPTH used by the find command"
-    echo -e "Example:\n  $ oc flogin -p ~/installations/"
+    echo -e "Example:\n  $ oc flogin ~/installations/ -D 4"
     echo -e "  $ oc flogin -v"
     echo -e "  $ oc flogin -h"
     exit 1
@@ -35,28 +36,42 @@ then
     echo -e "\n${RED}Error: Missing path.${NC}\n"
     usage
 else
-    while getopts "vhD:p:" OPT
+    while [ $# -gt 0 ]
     do
-      case $OPT in
-        v)
+      case "${1}" in
+        -v)
           echo $VERSION && exit 0
           ;;
-        D)
-          MAX_DEPTH=${OPTARG}
+        -D)
+          MAX_DEPTH="${2}"
+          shift
           ;;
-        p)
-          if [[ ! -d ${OPTARG} ]]
-          then
-            echo "\n${RED}Error: Invalid path '${OPTARG}'.${NC}\n"
-            usage
-          else
-            KUBE_PATH=$OPTARG
-          fi
+        -D=?*)
+          MAX_DEPTH="${1#-D=}"
           ;;
-        h|help|?|*)
+        -D?*)
+          MAX_DEPTH="${1#-D}"
+          ;;
+        -h|--help)
           usage
           ;;
+        *)
+          if [[ ! -z $KUBE_PATH ]]
+          then
+            echo "\n${RED}Error: Please specify only one path '${KUBE_PATH}' or '${1}'.${NC}\n"
+            usage
+          else
+            if [[ ! -d ${1} ]]
+            then
+              echo "\n${RED}Error: Invalid path '${1}'.${NC}\n"
+              usage
+            else
+              KUBE_PATH=$1
+            fi
+          fi
+          ;;
       esac
+      shift
     done
 fi
 
@@ -73,19 +88,19 @@ then
 else
   if [[ ${length} -gt 1 ]]
   then
-    echo "Multiple kubeconfig file found. Please select one from the list"
+    echo "Multiple kubeconfig files found."
     if [[ -z $ZSH_VERSION ]]; then
       for index in "${!KUBECONFIG_LIST[@]}"; do
         printf '[%s] %s\n' "$index" "${KUBECONFIG_LIST[index]}"
       done
       echo
-      read -p "Please select the kubeconfig file: " KUBEINDEX
+      read -p "Please select the desired kubeconfig file: " KUBEINDEX
     else
       for index in $(seq 1 ${length}); do
         printf '[%s] %s\n' "$index" "${KUBECONFIG_LIST[index]}"
       done
       echo
-      read "KUBEINDEX?Please select the kubeconfig file: "
+      read "KUBEINDEX?Please select the desired kubeconfig file: "
     fi
   else
     echo -e "${RED}No kubeconfig file found in given path: ${KUBE_PATH}${NC}"
@@ -94,7 +109,8 @@ else
 fi
 
 kubeconfig=${KUBECONFIG_LIST[KUBEINDEX]}
-kubeadminpassword="$(dirname ${KUBECONFIG_LIST[KUBEINDEX]})/kubeadmin-password"
+kubeconfig_path=$(dirname ${KUBECONFIG_LIST[KUBEINDEX]})
+kubeadminpassword="${kubeconfig_path}/kubeadmin-password"
 server=$(grep -m1 'server: ' $kubeconfig | awk '{print $2}')
 
 if [[ -f ${kubeadminpassword} ]]
@@ -103,13 +119,7 @@ then
     echo -e "${GREEN}Login with user/password from $kubeconfig${NC}"
     oc login -u kubeadmin --insecure-skip-tls-verify=true  -p ${kpass} ${server}
 else
-    echo -e "${RED}No kubeadmin-password file found in given path: ${KUBE_PATH}${NC}"
-    if [[ "$_" != "$0" ]]
-    then
-      echo -e "${GREEN}Setting KUBECONFIG variable as 'export KUBECONFIG=${kubeconfig}'${NC}"
-      export KUBECONFIG=${kubeconfig}
-    else
-      echo -e "${GREEN}Please consider to Source the script by running the command: '. $*'${NC}"
-      echo -e "${GREEN}Or exporting the variable: 'export KUBECONFIG=${kubeconfig}'${NC}"
-    fi
+    echo -e "${RED}No kubeadmin-password file found in given path: ${kuebconfig_path}${NC}"
+    echo -e "${GREEN}Please consider to Source the script by running the command: '. $0 ${INITIAL_OPTIONS}'${NC}"
+    echo -e "${GREEN}Or exporting the variable: 'export KUBECONFIG=${kubeconfig}'${NC}"
 fi
