@@ -1,60 +1,125 @@
 #!/bin/bash
 # Author: rbost@redhat.com (2020)
 
-VERSION="0.0.1"
-MAX_DEPTH=${MAX_DEPTH:-5}
+VERSION="0.0.2"
+
+if [[ -n ${ZSH_VERSION} ]] && [[ ! -z ${ZSH_VERSION} ]]; then
+  INDEX_START=1
+  INDEX_OFFSET=0
+elif [[ -n $BASH_VERSION ]]; then
+  INDEX_START=0
+  INDEX_OFFSET=1
+else
+  echo "  unknown"
+fi
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m' # No Color
+KUBE_PATH=''
+INITIAL_OPTIONS="$@"
 
 usage() { 
     echo -e "Login to OpenShift 4 cluster using installation assets directory.\n"
-    echo -e "Usage: oc flogin PATH"
-    echo -e "Example:\n  $ oc flogin ~/installations/test-cluster"
-    echo -e "  $ oc flogin ~/installations/test-cluster/auth"
-    echo -e "  $ oc flogin version"
-    echo -e "  $ oc flogin help"
-    exit 0
+    echo -e "Usage: oc flogin <INSTALL_PATH> [-h|-v|-D <depth>]"
+    echo -e "  -v: Display the version"
+    echo -e "  -h: Display this help"
+    echo -e "  -D: Set the MAX_DEPTH used by the find command"
+    echo -e "Example:\n  $ oc flogin ~/installations/ -D 4"
+    echo -e "  $ oc flogin -v"
+    echo -e "  $ oc flogin -h"
+    exit 1
 }
 
 if [ $# -eq 0 ];
 then
     echo -e "\n${RED}Error: Missing path.${NC}\n"
     usage
+else
+    while [ $# -gt 0 ]
+    do
+      case "${1}" in
+        -v)
+          echo $VERSION && exit 0
+          ;;
+        -D)
+          MAX_DEPTH="${2}"
+          shift
+          ;;
+        -D=?*)
+          MAX_DEPTH="${1#-D=}"
+          ;;
+        -D?*)
+          MAX_DEPTH="${1#-D}"
+          ;;
+        -h|--help)
+          usage
+          ;;
+        *)
+          if [[ ! -z $KUBE_PATH ]]
+          then
+            echo "\n${RED}Error: Please specify only one path '${KUBE_PATH}' or '${1}'.${NC}\n"
+            usage
+          else
+            if [[ ! -d ${1} ]]
+            then
+              echo "\n${RED}Error: Invalid path '${1}'.${NC}\n"
+              usage
+            else
+              KUBE_PATH=$1
+            fi
+          fi
+          ;;
+      esac
+      shift
+    done
 fi
 
-# optional argument handling
-if [[ "$1" == "version" ]]
+MAX_DEPTH=${MAX_DEPTH:-5}
+
+# Create the Array of available KUBECONFIG
+KUBECONFIG_LIST=($(find ${KUBE_PATH} -maxdepth ${MAX_DEPTH} -type f -name kubeconfig))
+
+# Display choices & select desired kubeconfig
+length=${#KUBECONFIG_LIST[@]}
+if [[ ${length} == 1 ]]
 then
-    echo $VERSION
-    exit 0
+    KUBEINDEX=$INDEX_START
+else
+  if [[ ${length} -gt 1 ]]
+  then
+    echo "Multiple kubeconfig files found."
+    if [[ -z $ZSH_VERSION ]]; then
+      for index in "${!KUBECONFIG_LIST[@]}"; do
+        printf '[%s] %s\n' "$index" "${KUBECONFIG_LIST[index]}"
+      done
+      echo
+      read -p "Please select the desired kubeconfig file: " KUBEINDEX
+    else
+      for index in $(seq 1 ${length}); do
+        printf '[%s] %s\n' "$index" "${KUBECONFIG_LIST[index]}"
+      done
+      echo
+      read "KUBEINDEX?Please select the desired kubeconfig file: "
+    fi
+  else
+    echo -e "${RED}No kubeconfig file found in given path: ${KUBE_PATH}${NC}"
+    exit 5
+  fi
 fi
 
-if [[ "$1" == "help" ]]
-then
-    usage
-fi
-
-kubeconfigC=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeconfig 2> /dev/null | wc -l)
-kubeadminpasswordC=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeadmin-password 2> /dev/null | wc -l)
-
-if [ $kubeconfigC -eq 0 ] || [ $kubeadminpasswordC -eq 0 ];
-then
-    echo -e "${RED}No kubeconfig or kubeadmin-password file found in given path: $1${NC}"
-    exit 1
-fi
-if [ $kubeconfigC -gt 1 ] || [ $kubeadminpasswordC -gt 1 ];
-then
-    echo -e "${RED}Too many kubeconfig or kubeadmin-password files found in given path.\nPlease provide a more specific path: $1${NC}"
-    exit 1
-fi
-
-kubeconfig=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeconfig 2> /dev/null)
-kubeadminpassword=$(find $1 -maxdepth $MAX_DEPTH -type f -name kubeadmin-password 2> /dev/null)
-
-echo -e "${GREEN}Using $kubeconfig${NC}"
+kubeconfig=${KUBECONFIG_LIST[KUBEINDEX]}
+kubeconfig_path=$(dirname ${KUBECONFIG_LIST[KUBEINDEX]})
+kubeadminpassword="${kubeconfig_path}/kubeadmin-password"
 server=$(grep -m1 'server: ' $kubeconfig | awk '{print $2}')
-kpass=$(cat $kubeadminpassword)
 
-oc login -u kubeadmin -p $kpass $server
+if [[ -f ${kubeadminpassword} ]]
+then
+    kpass=$(cat ${kubeadminpassword})
+    echo -e "${GREEN}Login with user/password from $kubeconfig${NC}"
+    oc login -u kubeadmin --insecure-skip-tls-verify=true  -p ${kpass} ${server}
+else
+    echo -e "${RED}No kubeadmin-password file found in given path: ${kuebconfig_path}${NC}"
+    echo -e "${GREEN}Please consider to Source the script by running the command: '. $0 ${INITIAL_OPTIONS}'${NC}"
+    echo -e "${GREEN}Or exporting the variable: 'export KUBECONFIG=${kubeconfig}'${NC}"
+fi

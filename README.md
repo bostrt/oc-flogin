@@ -23,6 +23,14 @@ You have access to 60 projects, the list has been suppressed. You can list all p
 
 Using project "openshift-operators".
 
+# oc-flogin ~/clusters -D 4
+Multiple kubeconfig file found. Please select one from the list
+[0] /home/user/clusters/aws/ocp4.4/auth/kubeconfig
+[1] /home/user/clusters/aws/ocp4.5/authkubeconfig
+
+Please select the kubeconfig file: 0
+Login with user/password from /home/user/clusters/aws/ocp4.4/auth/kubeconfig
+Login successful.
 ```
 
 That's about it, nothing real special. 
